@@ -28,32 +28,42 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @ChannelHandler.Sharable
 public final class HttpServerConnectHandler extends SimpleChannelInboundHandler<HttpProxyRequestHead> {
+
+    Logger logger = LoggerFactory.getLogger(HttpServerConnectHandler.class);
 
     private final Bootstrap b = new Bootstrap();
 
     @Override
     public void channelRead0(final ChannelHandlerContext ctx, final HttpProxyRequestHead requestHead) throws Exception {
-
+        logger.info("connect handler channel read");
         Promise<Channel> promise = ctx.executor().newPromise();
         final Channel inboundChannel = ctx.channel();
         promise.addListener(
                 new FutureListener<Channel>() {
                     @Override
                     public void operationComplete(final Future<Channel> future) throws Exception {
+                        logger.info("connect handler operation complete");
                         final Channel outboundChannel = future.getNow();
                         if (future.isSuccess()) {
+                            logger.info("connect handler future success");
                             ChannelFuture responseFuture;
                             if("TUNNEL".equals(requestHead.getProxyType())){
+                                logger.info("connect handler proxy type TUNNEL");
                                 responseFuture = inboundChannel.writeAndFlush(Unpooled.wrappedBuffer((requestHead.getProtocolVersion() + " 200 Connection Established\r\n\r\n").getBytes()));
                             }else if("WEB".equals(requestHead.getProxyType())){
+                                logger.info("connect handler proxy type WEb");
                                 responseFuture = outboundChannel.writeAndFlush(requestHead.getByteBuf());
                             }else{
+                                logger.info("connect handler proxy close");
                                 HttpServerUtils.closeOnFlush(inboundChannel);
                                 return;
                             }
+                            logger.info("connect handler proxy continue");
                             responseFuture.addListener(new ChannelFutureListener() {
                                 @Override
                                 public void operationComplete(ChannelFuture channelFuture) {
@@ -63,23 +73,26 @@ public final class HttpServerConnectHandler extends SimpleChannelInboundHandler<
                                 }
                             });
                         } else {
+                            logger.info("connect handler future is not success");
                             HttpServerUtils.closeOnFlush(inboundChannel);
                         }
                     }
                 });
-
+        logger.info("Bootstrap add new handler:DirectClientHandler");
         b.group(inboundChannel.eventLoop())
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .handler(new DirectClientHandler(promise));
-
+        logger.info("begin connect,host={},port={}",requestHead.getHost(),requestHead.getPort());
         b.connect(requestHead.getHost(), requestHead.getPort()).addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
                 if (future.isSuccess()) {
+                    logger.info("connect success");
                     // Connection established use handler provided results
                 } else {
+                    logger.info("connect fail,close channel");
                     // Close the connection if the connection attempt has failed.
                     HttpServerUtils.closeOnFlush(inboundChannel);
                 }
@@ -89,6 +102,7 @@ public final class HttpServerConnectHandler extends SimpleChannelInboundHandler<
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        logger.info("server connect handler exception caught");
         HttpServerUtils.closeOnFlush(ctx.channel());
     }
 }

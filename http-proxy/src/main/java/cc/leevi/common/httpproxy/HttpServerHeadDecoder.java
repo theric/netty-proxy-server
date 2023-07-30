@@ -8,10 +8,13 @@ import io.netty.handler.codec.http.HttpConstants;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.util.ByteProcessor;
 import io.netty.util.internal.AppendableCharSequence;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URL;
 
 public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> {
+    Logger logger = LoggerFactory.getLogger(HttpServerHeadDecoder.class);
 
     private HttpServerHeadDecoder.HeadLineByteProcessor headLineByteProcessor = new HttpServerHeadDecoder.HeadLineByteProcessor();
 
@@ -31,11 +34,13 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
                 return null;
             }
             buffer.readerIndex(i + 1);
+            logger.info("parse result:{}",seq.toString());
             return seq;
         }
 
         @Override
         public boolean process(byte value) throws Exception {
+            logger.info("process byte:"+value);
             char nextByte = (char) (value & 0xFF);
             if (nextByte == HttpConstants.LF) {
                 int len = seq.length();
@@ -52,8 +57,10 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        logger.info("decode handler,read");
         AppendableCharSequence seq = headLineByteProcessor.parse(in);
         if(seq.charAt(seq.length()-1) == HttpConstants.LF){
+            logger.info("decode handler,read length={}",HttpConstants.LF);
             HttpProxyRequestHead httpProxyRequestHead;
             String[] splitInitialLine = splitInitialLine(seq);
             String method = splitInitialLine[0];
@@ -62,6 +69,7 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
             String host;
             int port;
             if(HttpMethod.CONNECT.name().equals(method)){
+                logger.info("decode handler connect");
                 //https tunnel proxy
                 HostAndPort hostAndPort = HostAndPort.fromString(uri);
                 host = hostAndPort.getHost();
@@ -69,6 +77,7 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
 
                 httpProxyRequestHead = new HttpProxyRequestHead(host, port, "TUNNEL",protocolVersion,null);
             }else{
+                logger.info("decode handler method={}",method);
                 //http proxy
                 URL url = new URL(uri);
                 host = url.getHost();
@@ -79,12 +88,14 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
 
                 httpProxyRequestHead = new HttpProxyRequestHead(host, port,"WEB",protocolVersion,in.retain().resetReaderIndex());
             }
+            logger.info("sever connect handler remove");
             ctx.pipeline().addLast(new HttpServerConnectHandler()).remove(this);
             ctx.fireChannelRead(httpProxyRequestHead);
         }
     }
 
     private static String[] splitInitialLine(AppendableCharSequence sb) {
+        System.out.println("splitInitialLine:"+sb.toString());
         int aStart;
         int aEnd;
         int bStart;
@@ -108,6 +119,7 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
     }
 
     private static int findNonSPLenient(AppendableCharSequence sb, int offset) {
+        System.out.println("findNonSPLenient:"+sb.toString());
         for (int result = offset; result < sb.length(); ++result) {
             char c = sb.charAtUnsafe(result);
             // See https://tools.ietf.org/html/rfc7230#section-3.5
@@ -124,6 +136,7 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
     }
 
     private static int findSPLenient(AppendableCharSequence sb, int offset) {
+        System.out.println("findSPLenient:"+sb.toString());
         for (int result = offset; result < sb.length(); ++result) {
             if (isSPLenient(sb.charAtUnsafe(result))) {
                 return result;
@@ -152,6 +165,7 @@ public class HttpServerHeadDecoder extends SimpleChannelInboundHandler<ByteBuf> 
     }
 
     private static int findEndOfString(AppendableCharSequence sb) {
+        System.out.println("findEndOfString:"+sb.toString());
         for (int result = sb.length() - 1; result > 0; --result) {
             if (!Character.isWhitespace(sb.charAtUnsafe(result))) {
                 return result + 1;

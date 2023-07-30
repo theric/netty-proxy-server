@@ -26,7 +26,7 @@ public class HttpServer {
                 .channel(NioServerSocketChannel.class)
                 .childHandler(new HttpProxyServerInitializer())
                 .group(serverEventLoopGroup);
-        acceptorChannel = serverBootstrap.bind(17891).syncUninterruptibly().channel();
+        acceptorChannel = serverBootstrap.bind(9998).syncUninterruptibly().channel();
     }
 
     public void shutdown(){
@@ -34,5 +34,10 @@ public class HttpServer {
         acceptorChannel.close().syncUninterruptibly();
         serverEventLoopGroup.shutdownGracefully().syncUninterruptibly();
         logger.info("shutdown completed!");
+    }
+
+    public static void main(String[] args) {
+        HttpServer httpServer = new HttpServer();
+        httpServer.startServer();
     }
 }
